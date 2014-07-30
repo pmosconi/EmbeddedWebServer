@@ -13,60 +13,71 @@ static const char *html_form =
 "</form></body></html>";
 
 
-static void send_reply(struct mg_connection *conn) {
+static int send_reply(struct mg_connection *conn) {
 	char var1[500], var2[500];
 
-	if (!strcmp(conn->uri, "/handle_post_request") ) {
-		// User has submitted a form, show submitted data and a variable value
-		// Parse form data. var1 and var2 are guaranteed to be NUL-terminated
-		mg_get_var(conn, "input_1", var1, sizeof(var1));
-		mg_get_var(conn, "input_2", var2, sizeof(var2));
-
-		// Send reply to the client, showing submitted form values.
-		// POST data is in conn->content, data length is in conn->content_len
-		mg_send_header(conn, "Content-Type", "text/plain");
-		mg_printf_data(conn,
-			"Submitted data: [%.*s]\n"
-			"Submitted data length: %d bytes\n"
-			"input_1: [%s]\n"
-			"input_2: [%s]\n",
-			conn->content_len, conn->content,
-			conn->content_len, var1, var2);
+	if (conn->is_websocket) {
+		// This handler is called for each incoming websocket frame, one or more
+		// times for connection lifetime.
+		// Echo websocket data back to the client.
+		mg_websocket_write(conn, 1, conn->content, conn->content_len);
+		return conn->content_len == 4 && !memcmp(conn->content, "exit", 4) ?
+		MG_FALSE : MG_TRUE;
 	}
-	else if (!strcmp(conn->uri, "/post_request")) {
-		// Show HTML form.
-		mg_send_data(conn, html_form, strlen(html_form));
-	}
-	else if (!strcmp(conn->uri, "/get_request")) {
-		// User has submitted a get, check for the 2 parameters.
-		mg_get_var(conn, "input_1", var1, sizeof(var1));
-		mg_get_var(conn, "input_2", var2, sizeof(var2));
-
-		// Send reply to the client, showing parameter values.
-		mg_send_header(conn, "Content-Type", "text/plain");
-		mg_printf_data(conn,
-			"input_1: [%s]\n"
-			"input_2: [%s]\n",
-			var1, var2);
-	}
+	// !conn->is_websocket
 	else {
-		// Show Usage
-		mg_send_header(conn, "Content-Type", "text/plain");
-		mg_printf_data(conn,
-			"Usage\n"
-			"/post_request\n"
-			"/get_request?input_1=value&input_2=value\n");
+		if (!strcmp(conn->uri, "/handle_post_request")) {
+			// User has submitted a form, show submitted data and a variable value
+			// Parse form data. var1 and var2 are guaranteed to be NUL-terminated
+			mg_get_var(conn, "input_1", var1, sizeof(var1));
+			mg_get_var(conn, "input_2", var2, sizeof(var2));
 
-		if (!silent) {
-			printf("Received invalid uri: %s\n", conn->uri);
+			// Send reply to the client, showing submitted form values.
+			// POST data is in conn->content, data length is in conn->content_len
+			mg_send_header(conn, "Content-Type", "text/plain");
+			mg_printf_data(conn,
+				"Submitted data: [%.*s]\n"
+				"Submitted data length: %d bytes\n"
+				"input_1: [%s]\n"
+				"input_2: [%s]\n",
+				conn->content_len, conn->content,
+				conn->content_len, var1, var2);
 		}
+		else if (!strcmp(conn->uri, "/post_request")) {
+			// Show HTML form.
+			mg_send_data(conn, html_form, strlen(html_form));
+		}
+		else if (!strcmp(conn->uri, "/get_request")) {
+			// User has submitted a get, check for the 2 parameters.
+			mg_get_var(conn, "input_1", var1, sizeof(var1));
+			mg_get_var(conn, "input_2", var2, sizeof(var2));
+
+			// Send reply to the client, showing parameter values.
+			mg_send_header(conn, "Content-Type", "text/plain");
+			mg_printf_data(conn,
+				"input_1: [%s]\n"
+				"input_2: [%s]\n",
+				var1, var2);
+		}
+		else {
+			// Show Usage
+			mg_send_header(conn, "Content-Type", "text/plain");
+			mg_printf_data(conn,
+				"Usage\n"
+				"/post_request\n"
+				"/get_request?input_1=value&input_2=value\n");
+
+			if (!silent) {
+				printf("Received invalid uri: %s\n", conn->uri);
+			}
+		}
+		return MG_TRUE;
 	}
 }
 
 static int ev_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_REQUEST) {
-		send_reply(conn);
-		return MG_TRUE;
+		return send_reply(conn);
 	}
 	else if (ev == MG_AUTH) {
 		return MG_TRUE;
