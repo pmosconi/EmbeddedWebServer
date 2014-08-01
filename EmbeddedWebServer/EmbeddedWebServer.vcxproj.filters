@@ -18,12 +18,15 @@
     <ClCompile Include="mongoose.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="EmbeddedWebServer.c">
+    <ClCompile Include="EmbeddedWebServer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mongoose.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libjson\libjson.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

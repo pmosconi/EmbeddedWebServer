@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "mongoose.h"
+#include "../libjson/libjson.h"
 
 int silent;
 
@@ -15,12 +16,21 @@ static const char *html_form =
 
 static int send_reply(struct mg_connection *conn) {
 	char var1[500], var2[500];
+	JSONNode n(JSON_NODE);
 
 	if (conn->is_websocket) {
 		// This handler is called for each incoming websocket frame, one or more
 		// times for connection lifetime.
-		// Echo websocket data back to the client.
-		mg_websocket_write(conn, 1, conn->content, conn->content_len);
+		// Send JSON containing received data
+		// Test with http://www.websocket.org/echo.html
+		std::string responseString(conn->content, conn->content_len);
+		n.push_back(JSONNode("Response", ""));
+		JSONNode c(JSON_NODE);
+		c.push_back(JSONNode("Response Data", responseString));
+		c.push_back(JSONNode("Response Lenght", conn->content_len));
+		n.push_back(c);
+		std::string jc = n.write();
+		mg_websocket_write(conn, 1, jc.c_str(), jc.length());
 		return conn->content_len == 4 && !memcmp(conn->content, "exit", 4) ?
 		MG_FALSE : MG_TRUE;
 	}
@@ -53,11 +63,17 @@ static int send_reply(struct mg_connection *conn) {
 			mg_get_var(conn, "input_2", var2, sizeof(var2));
 
 			// Send reply to the client, showing parameter values.
+			// Send plain text
 			mg_send_header(conn, "Content-Type", "text/plain");
 			mg_printf_data(conn,
 				"input_1: [%s]\n"
 				"input_2: [%s]\n",
 				var1, var2);
+			// Send JSON
+			n.push_back(JSONNode("input_1", var1));
+			n.push_back(JSONNode("input_2", var2));
+			std::string jc = n.write();
+			mg_printf_data(conn, jc.c_str());
 		}
 		else {
 			// Show Usage
