@@ -3,7 +3,7 @@
 #include "mongoose.h"
 #include "../libjson/libjson.h"
 
-bool silent;
+int silent;
 
 static const char *html_form =
 "<html><body>POST example."
@@ -13,48 +13,7 @@ static const char *html_form =
 "<input type=\"submit\" />"
 "</form></body></html>";
 
-// Console message printing if not silent mode
-void inline silent_printf(bool silent, const char* format, ...) {
-	if (!silent) {
-		va_list ap;
-		va_start(ap, format);
-		vprintf(format, ap);
-		va_end(ap);
-	}
-}
 
-// Parse JSON from GET
-void ParseJSON(struct mg_connection *conn, const JSONNode & n) {
-	JSONNode::const_iterator i = n.begin();
-	mg_printf_data(conn, "-- Array or Node Start\n");
-	silent_printf(silent, "-- Array or Node Start\n");
-	while (i != n.end()){
-		// recursively call ourselves to dig deeper into the tree
-		if (i->type() == JSON_ARRAY || i->type() == JSON_NODE) {
-			ParseJSON(conn, *i);
-		}
-		// get the node name and value as a string
-		std::string node_name = i->name();
-		std::string node_value = i->as_string();
-
-		mg_printf_data(conn,
-			"Node Name: [%s] "
-			"Node Value: [%s]\n",
-			node_name.c_str(), node_value.c_str());
-		silent_printf(silent, 
-			"Node Name: [%s] "
-			"Node Value: [%s]\n",
-			node_name.c_str(), node_value.c_str());
-
-		//increment the iterator
-		++i;
-	}
-	mg_printf_data(conn, "-- Array or Node End\n");
-	silent_printf(silent, "-- Array or Node End\n");
-
-}
-
-// WebServer reply manager
 static int send_reply(struct mg_connection *conn) {
 	char var1[500], var2[500];
 	JSONNode n(JSON_NODE);
@@ -83,31 +42,17 @@ static int send_reply(struct mg_connection *conn) {
 			mg_get_var(conn, "input_1", var1, sizeof(var1));
 			mg_get_var(conn, "input_2", var2, sizeof(var2));
 
+			// Send reply to the client, showing submitted form values.
+			// POST data is in conn->content, data length is in conn->content_len
 			mg_send_header(conn, "Content-Type", "text/plain");
-
-			// If var1 = JSON then var2 contains a JSON that can be parsed
-			if (!strcmp(var1, "JSON")) {
-				std::string json(var2);
-				if (libjson::is_valid(json)) {
-					JSONNode v2 = libjson::parse(json);
-					ParseJSON(conn, v2);
-				}
-				else {
-					mg_printf_data(conn, "Error! Expected Valid JSON [%s]\n", var2);
-				}
-			}
-			else {
-				// Send reply to the client, showing submitted form values.
-				// POST data is in conn->content, data length is in conn->content_len
-				mg_printf_data(conn,
-					"Submitted data: [%.*s]\n"
-					"Submitted data length: %d bytes\n"
-					"input_1: [%s]\n"
-					"input_2: [%s]\n",
-					conn->content_len, conn->content,
-					conn->content_len, var1, var2);
-			} // var1 == JSON
-		} // uri == "/handle_post_request"
+			mg_printf_data(conn,
+				"Submitted data: [%.*s]\n"
+				"Submitted data length: %d bytes\n"
+				"input_1: [%s]\n"
+				"input_2: [%s]\n",
+				conn->content_len, conn->content,
+				conn->content_len, var1, var2);
+		}
 		else if (!strcmp(conn->uri, "/post_request")) {
 			// Show HTML form.
 			mg_send_data(conn, html_form, strlen(html_form));
@@ -138,13 +83,14 @@ static int send_reply(struct mg_connection *conn) {
 				"/post_request\n"
 				"/get_request?input_1=value&input_2=value\n");
 
-			silent_printf(silent, "Received invalid uri: %s\n", conn->uri);
+			if (!silent) {
+				printf("Received invalid uri: %s\n", conn->uri);
+			}
 		}
 		return MG_TRUE;
 	}
 }
 
-// WebServer callback function
 static int ev_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_REQUEST) {
 		return send_reply(conn);
@@ -160,48 +106,20 @@ static int ev_handler(struct mg_connection *conn, enum mg_event ev) {
 int main(int argc, char *argv[]) {
 	struct mg_server *server = mg_create_server(NULL, ev_handler);
 
-	char listening_port[6] = "80"; // default web port
-	silent = false; // default no silent mode
-	int i = 0;
-
 	// read argument for Console
-	for (i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "-Silent")) {
-			silent = true;
-		}
-		else if (!strcmp(argv[i], "-Port")) {
-			if (++i < argc) {
-				char* p = 0x0;
-				long lport = strtol(argv[i], &p, 10);
-				if (lport <= 0 || lport > 65535) {
-					silent_printf(false, "Invalid Port [%s]\n", argv[i]);
-					return(-1);
-				}
-				else {
-					strcpy_s(listening_port, argv[i]);
-				}
-			}
-			else {
-				silent_printf(false, "Missinig Port Number\n");
-				return(-1);
-			}
-		}
-		else if (!strcmp(argv[i], "-h")){
-			silent_printf(false, 
-				"EmbeddedWebServer Usage:\n"
-				"-Silent\n"
-				"-Port <port_number>\n");
-			return(-1);
-		}
-		else {
-			silent_printf(false, "Unrecognized Parameter [%s]\n", argv[i]);
-			return(-1);
-		}
+	if (argc > 1 && !strcmp(argv[1], "-C")) {
+		silent = 0;
+	}
+	else
+	{
+		silent = 1;
 	}
 
-	mg_set_option(server, "listening_port", listening_port);
+	mg_set_option(server, "listening_port", "8080");
 
-	silent_printf(silent, "Starting on port %s\n", mg_get_option(server, "listening_port")); 
+	if (!silent) { 
+		printf("Starting on port %s\n", mg_get_option(server, "listening_port")); 
+	}
 
 	for (;;) {
 		mg_poll_server(server, 1000);
