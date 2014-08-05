@@ -146,11 +146,9 @@ static void send_reply_get_request(struct mg_connection *conn) {
 
 // Default reply manager
 // Show usage and throw error message
-static mg_result send_reply_default(struct mg_connection *conn) {
-	if (!strcmp(conn->uri, "/favicon.ico")) {
-		return MG_TRUE;  // should be false, but can't find file
-	}
-	else {
+// Avoid messages when browser calls default favicon.ico
+static void send_reply_default(struct mg_connection *conn) {
+	if (strcmp(conn->uri, "/favicon.ico")) {
 		mg_send_header(conn, "Content-Type", "text/plain");
 		mg_printf_data(conn,
 			"Usage\n"
@@ -158,14 +156,12 @@ static mg_result send_reply_default(struct mg_connection *conn) {
 			"/get_request?input_1=value&input_2=value\n");
 
 		silent_printf(silent, "Received invalid uri: %s\n", conn->uri);
-
-		return MG_TRUE;
 	}
 }
 
 // WebServer reply manager
 // Here we need to manage the pages/events we want to deal with
-static int send_reply(struct mg_connection *conn) {
+static mg_result send_reply(struct mg_connection *conn) {
 	if (conn->is_websocket) {
 		// This handler is called for each incoming websocket frame, one or more
 		// times for connection lifetime.
@@ -211,10 +207,8 @@ static int ev_handler(struct mg_connection *conn, enum mg_event ev) {
 bool cmdline_arg_set(struct mg_server *server, int argc, char *argv[]) {
 	char listening_port[6] = "80"; // default web port
 	silent = false; // default no silent mode
-	//char cCurrentPath[FILENAME_MAX]; // working directory
 
 	bool retval = true;
-	//_getcwd(cCurrentPath, sizeof(cCurrentPath));
 
 	// read argument for Console
 	for (int i = 1; i < argc; i++) {
@@ -254,10 +248,6 @@ bool cmdline_arg_set(struct mg_server *server, int argc, char *argv[]) {
 	if (retval) {
 		mg_set_option(server, "listening_port", listening_port);
 		silent_printf(silent, "Starting on port %s\n", mg_get_option(server, "listening_port"));
-
-		//mg_set_option(server, "root", cCurrentPath);
-		//silent_printf(silent, "Root: %s\n", mg_get_option(server, "root"));
-		//silent_printf(silent, "path: %s\n", cCurrentPath);
 	}
 
 	return retval;
